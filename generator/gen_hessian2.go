@@ -84,11 +84,7 @@ func processProtoEnum(g *protogen.GeneratedFile, e *protogen.Enum) *Enum {
 	}
 	g.QualifiedGoIdent(e.GoIdent)
 
-	ext := proto.GetExtension(e.Desc.Options(), unified_idl_extend.E_EnumExtend)
-	if ext == nil {
-		return enum
-	}
-	opts, ok := ext.(*unified_idl_extend.Hessian2EnumOptions)
+	opts, ok := proto.GetExtension(e.Desc.Options(), unified_idl_extend.E_EnumExtend).(*unified_idl_extend.Hessian2EnumOptions)
 	if !ok {
 		return enum
 	}
@@ -108,53 +104,47 @@ func processProtoMessage(g *protogen.GeneratedFile, file *protogen.File, m *prot
 
 	for _, inner := range m.Messages {
 		processedInnerMsg := processProtoMessage(g, file, inner)
-		ext := proto.GetExtension(inner.Desc.Options(), unified_idl_extend.E_MessageExtend)
-		if ext == nil {
-			msg.InnerMessages = append(msg.InnerMessages, processedInnerMsg)
-			continue
-		}
-		opts, _ := ext.(*unified_idl_extend.Hessian2MessageOptions)
+		opts, _ := proto.GetExtension(inner.Desc.Options(), unified_idl_extend.E_MessageExtend).(*unified_idl_extend.Hessian2MessageOptions)
 		if opts != nil && opts.IsInheritance {
 			processedInnerMsg.IsInheritance = true
-			msg.InnerMessages = append(msg.InnerMessages, processedInnerMsg)
 		}
+		msg.InnerMessages = append(msg.InnerMessages, processedInnerMsg)
 	}
 
 	var fields []*Field
 	for _, field := range m.Fields {
 		var typ string
 		if field.Message != nil {
-			ext := proto.GetExtension(field.Message.Desc.Options(), unified_idl_extend.E_MessageExtend)
-			if ext != nil {
-				opts, _ := ext.(*unified_idl_extend.Hessian2MessageOptions)
-				if opts != nil && opts.ReferencePath != "" {
-					typ = "*" + g.QualifiedGoIdent(protogen.GoIdent{
-						GoName:       field.Message.GoIdent.GoName,
-						GoImportPath: protogen.GoImportPath(opts.ReferencePath),
-					})
-				}
+			opts, _ := proto.GetExtension(field.Message.Desc.Options(), unified_idl_extend.E_MessageExtend).(*unified_idl_extend.Hessian2MessageOptions)
+			if opts != nil && opts.ReferencePath != "" {
+				typ = "*" + g.QualifiedGoIdent(protogen.GoIdent{
+					GoName:       field.Message.GoIdent.GoName,
+					GoImportPath: protogen.GoImportPath(opts.ReferencePath),
+				})
 			}
 		}
+
 		if typ == "" {
 			typ = getGoType(g, field)
 		}
+		defaultValue := fieldDefaultValue(g, file, m, field)
+
+		opts, _ := proto.GetExtension(field.Desc.Options(), unified_idl_extend.E_FieldExtend).(*unified_idl_extend.Hessian2FieldOptions)
+		if opts != nil && opts.IsWrapper {
+			typ = "*" + typ
+			defaultValue = "nil"
+		}
+
 		fields = append(fields, &Field{
 			Field:        field,
 			Type:         typ,
-			DefaultValue: fieldDefaultValue(g, file, m, field),
+			DefaultValue: defaultValue,
 		})
 	}
 	msg.Fields = fields
 
-	ext := proto.GetExtension(m.Desc.Options(), unified_idl_extend.E_MessageExtend)
-	if ext == nil {
-		panic(ErrNoMessageExtend)
-	}
-	opts, ok := ext.(*unified_idl_extend.Hessian2MessageOptions)
-	if !ok {
-		panic(ErrNoMessageExtend)
-	}
-	if opts.JavaClassName == "" && !opts.ExtendArgs {
+	opts, ok := proto.GetExtension(m.Desc.Options(), unified_idl_extend.E_MessageExtend).(*unified_idl_extend.Hessian2MessageOptions)
+	if !ok || (opts.JavaClassName == "" && !opts.ExtendArgs) {
 		panic(ErrNoJavaClassName)
 	}
 	msg.JavaClassName = opts.JavaClassName
