@@ -331,6 +331,9 @@ func fieldDefaultValue(g *protogen.GeneratedFile, f *protogen.File, m *protogen.
 		}
 		return defVarName
 	}
+	if field.Desc.HasOptionalKeyword() {
+		return "nil"
+	}
 	switch field.Desc.Kind() {
 	case protoreflect.BoolKind:
 		return "false"
